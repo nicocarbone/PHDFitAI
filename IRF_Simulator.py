@@ -84,4 +84,4 @@ def generate_instrument_function_multi_peak(jitter_std_dev_ps=50.0,
         peak_instrument_function, _ = np.histogram(simulated_arrival_times_ps, bins=time_bins_ps)
         total_instrument_function += peak_instrument_function + np.random.normal(avg_noise_floor, sd_noise_floor, num_bins)
 
-    return time_bins_ps, total_instrument_function
+    return total_instrument_function, time_bins_ps
