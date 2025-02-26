@@ -140,8 +140,8 @@ def MCPHD (uaBulk, usBulk, g=0.9, n=1.4, sdSep = 20, slabThickness = 60, detRad 
     cfg['nphoton']=nPhotons
     cfg['vol']=np.zeros([maxSizeX, maxSizeY, maxSizeZ], dtype='uint8')
     cfg['tstart']=0
-    cfg['tend']=5e-9
-    cfg['tstep']=5e-9
+    cfg['tend']=maxTime
+    cfg['tstep']=maxTime
     cfg['srcdir']=[0,0,1]
     cfg['issavedet']=1                         # cfg.issavedet must be set to 1 or True in order to save detected photons
     cfg['issrcfrom0']=1   
@@ -158,7 +158,6 @@ def MCPHD (uaBulk, usBulk, g=0.9, n=1.4, sdSep = 20, slabThickness = 60, detRad 
     start = time.time()
     res=pmcx.mcxlab(cfg)
     
-    maxTime = cfg['tend']
     binSize = maxTime/nTimeBins
     
     timeParams = [0, maxTime, binSize]
