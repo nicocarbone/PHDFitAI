@@ -11,15 +11,15 @@ import time
 
 tic = time.time()
 
-#mcData = sc.io.loadmat('DTOFs_2-24-2025_fine.mat')
-mcData = mat73.loadmat('DTOFs_2-25-2025_coarseAndWider_1e9.mat')
+mcData = mat73.loadmat('DTOFs_2-24-2025_fine.mat')
+#mcData = mat73.loadmat('DTOFs_2-25-2025_coarseAndWider_1e9.mat')
 uas = mcData['ua'].reshape(-1)
 upss = mcData['ups'].reshape(-1)
 rhos = mcData['rho'].reshape(-1)
 dtofs = mcData['DTOF']
 cfg = mcData['cfg']
 
-nroOPs = 200
+nroOPs = 750
 nroRhos = 1
 nroIRFs = 2
 n_channels = 4096
@@ -27,6 +27,9 @@ n_channels = 4096
 irf_timeRange_ns = 50
 irf_timeResolution_ps = (irf_timeRange_ns/n_channels)*1000
 irf_minDelay = 1000
+
+irf_real_proportion = 0.7
+irf_real_samples = np.load('irfs_samples.npy')
 
 sim_results = []
 sim_irfs = []
@@ -73,70 +76,74 @@ for iua in range(nroOPs):
             
             print('{}/{} - ua = {}, ups = {}, rho = {}'.format(idsim, nroOPs*nroRhos*nroIRFs, ua, ups, rho))
             
-            irf_peak_delay1 = int(np.random.normal(5000, 500))
-            if irf_peak_delay1 < irf_minDelay: irf_peak_delay1 = irf_minDelay
-            irf_peak_delay2 = irf_peak_delay1 + int(np.random.normal(200, 50))
-            if irf_peak_delay2 < irf_peak_delay1: irf_peak_delay2 = irf_peak_delay1
-            irf_peak_delay3 = irf_peak_delay2 + int(np.random.normal(600, 50))
-            if irf_peak_delay3 < irf_peak_delay2: irf_peak_delay3 = irf_peak_delay2
-            irf_peak_delay4 = irf_peak_delay3 + int(np.random.normal(200, 50))
-            if irf_peak_delay4 < irf_peak_delay3: irf_peak_delay4 = irf_peak_delay3
-            
-            irf_peak_ratio1 = 1
-            irf_peak_ratio2 = np.random.normal(0.6, 0.1)
-            if irf_peak_ratio2 < 0: irf_peak_ratio2 = 0
-            irf_peak_ratio3 = np.random.normal(0.3, 0.1)
-            if irf_peak_ratio3 < 0: irf_peak_ratio3 = 0
-            irf_peak_ratio4 = np.random.normal(1, 0.1)
-            if irf_peak_ratio4 < 0: irf_peak_ratio4 = 0
-            
-            irf_peak_width_ps1 = int(np.random.normal(350, 50))
-            if irf_peak_width_ps1 < 0: irf_peak_width_ps1 = 0
-                                  
-            irf_peak_width_ps2 = int(np.random.normal(550, 50))
-            if irf_peak_width_ps2 < irf_peak_width_ps1: irf_peak_width_ps2 = irf_peak_width_ps1
-            
-            irf_peak_width_ps3 = int(np.random.normal(700, 100))
-            if irf_peak_width_ps3 < irf_peak_width_ps2: irf_peak_width_ps3 = irf_peak_width_ps2
-            
-            irf_peak_width_ps4 = int(np.random.normal(2500, 200))
-            if irf_peak_width_ps4 < irf_peak_width_ps3: irf_peak_width_ps4 = irf_peak_width_ps3
-            
-            irf_jitter_std_dev_ps = np.random.normal(30, 5)
-            
-            irf_detector_response_fwhm_ps = np.random.normal(40, 5)
-            
-            irf_avg_noise_floor = int(np.random.normal(200, 20))
-            if irf_avg_noise_floor < 0: irf_avg_noise_floor = 0
-            
-            irf_sd_noise_floor = int(np.random.normal(20, 5))
-            if irf_sd_noise_floor < 0: irf_sd_noise_floor = 0
-            
-            
-            irf_photoncount = int(np.random.normal(1e7, 1e5))
-            
-            sim_randomsIRF.append([irf_peak_delay1, irf_peak_delay2, irf_peak_delay3, irf_peak_delay4,
-                                    irf_peak_ratio1, irf_peak_ratio2, irf_peak_ratio3, irf_peak_ratio4,
-                                    irf_peak_width_ps1, irf_peak_width_ps2, irf_peak_width_ps3, irf_peak_width_ps4,
-                                    irf_jitter_std_dev_ps, irf_detector_response_fwhm_ps,
-                                    irf_avg_noise_floor, irf_sd_noise_floor, irf_photoncount])
-            
-            irf, irf_times = irfsim.generate_instrument_function_multi_peak(
-                                                photon_count=irf_photoncount,   
-                                                time_range_ns=irf_timeRange_ns,
-                                                time_resolution_ps=irf_timeResolution_ps,
-                                                peak_widths_ps=[irf_peak_width_ps1, irf_peak_width_ps2, irf_peak_width_ps3, irf_peak_width_ps4],
-                                                jitter_std_dev_ps=irf_jitter_std_dev_ps,
-                                                detector_response_type="gaussian",
-                                                detector_response_params={'fwhm_ps': irf_detector_response_fwhm_ps},
-                                                peak_delays_ps=[irf_peak_delay1, irf_peak_delay2, irf_peak_delay3, irf_peak_delay4],
-                                                peak_ratios=[irf_peak_ratio1, irf_peak_ratio2, irf_peak_ratio3, irf_peak_ratio4],
-                                                avg_noise_floor=irf_avg_noise_floor,
-                                                sd_noise_floor=irf_sd_noise_floor
-                                            )
-            
-            irf = irf - np.min(irf)
-            irf = irf / np.sum(irf)
+            irf_real_selected = np.random.rand()
+            if irf_real_selected < irf_real_proportion:
+                irf = irf_real_samples[np.random.randint(0, len(irf_real_samples))]
+            else:
+                irf_peak_delay1 = int(np.random.normal(5000, 500))
+                if irf_peak_delay1 < irf_minDelay: irf_peak_delay1 = irf_minDelay
+                irf_peak_delay2 = irf_peak_delay1 + int(np.random.normal(200, 50))
+                if irf_peak_delay2 < irf_peak_delay1: irf_peak_delay2 = irf_peak_delay1
+                irf_peak_delay3 = irf_peak_delay2 + int(np.random.normal(600, 50))
+                if irf_peak_delay3 < irf_peak_delay2: irf_peak_delay3 = irf_peak_delay2
+                irf_peak_delay4 = irf_peak_delay3 + int(np.random.normal(200, 50))
+                if irf_peak_delay4 < irf_peak_delay3: irf_peak_delay4 = irf_peak_delay3
+                
+                irf_peak_ratio1 = 1
+                irf_peak_ratio2 = np.random.normal(0.6, 0.1)
+                if irf_peak_ratio2 < 0: irf_peak_ratio2 = 0
+                irf_peak_ratio3 = np.random.normal(0.3, 0.1)
+                if irf_peak_ratio3 < 0: irf_peak_ratio3 = 0
+                irf_peak_ratio4 = np.random.normal(1, 0.1)
+                if irf_peak_ratio4 < 0: irf_peak_ratio4 = 0
+                
+                irf_peak_width_ps1 = int(np.random.normal(350, 50))
+                if irf_peak_width_ps1 < 0: irf_peak_width_ps1 = 0
+                                    
+                irf_peak_width_ps2 = int(np.random.normal(550, 50))
+                if irf_peak_width_ps2 < irf_peak_width_ps1: irf_peak_width_ps2 = irf_peak_width_ps1
+                
+                irf_peak_width_ps3 = int(np.random.normal(700, 100))
+                if irf_peak_width_ps3 < irf_peak_width_ps2: irf_peak_width_ps3 = irf_peak_width_ps2
+                
+                irf_peak_width_ps4 = int(np.random.normal(2500, 200))
+                if irf_peak_width_ps4 < irf_peak_width_ps3: irf_peak_width_ps4 = irf_peak_width_ps3
+                
+                irf_jitter_std_dev_ps = np.random.normal(30, 5)
+                
+                irf_detector_response_fwhm_ps = np.random.normal(40, 5)
+                
+                irf_avg_noise_floor = int(np.random.normal(200, 20))
+                if irf_avg_noise_floor < 0: irf_avg_noise_floor = 0
+                
+                irf_sd_noise_floor = int(np.random.normal(20, 5))
+                if irf_sd_noise_floor < 0: irf_sd_noise_floor = 0
+                
+                
+                irf_photoncount = int(np.random.normal(1e7, 1e5))
+                
+                sim_randomsIRF.append([irf_peak_delay1, irf_peak_delay2, irf_peak_delay3, irf_peak_delay4,
+                                        irf_peak_ratio1, irf_peak_ratio2, irf_peak_ratio3, irf_peak_ratio4,
+                                        irf_peak_width_ps1, irf_peak_width_ps2, irf_peak_width_ps3, irf_peak_width_ps4,
+                                        irf_jitter_std_dev_ps, irf_detector_response_fwhm_ps,
+                                        irf_avg_noise_floor, irf_sd_noise_floor, irf_photoncount])
+                
+                irf, irf_times = irfsim.generate_instrument_function_multi_peak(
+                                                    photon_count=irf_photoncount,   
+                                                    time_range_ns=irf_timeRange_ns,
+                                                    time_resolution_ps=irf_timeResolution_ps,
+                                                    peak_widths_ps=[irf_peak_width_ps1, irf_peak_width_ps2, irf_peak_width_ps3, irf_peak_width_ps4],
+                                                    jitter_std_dev_ps=irf_jitter_std_dev_ps,
+                                                    detector_response_type="gaussian",
+                                                    detector_response_params={'fwhm_ps': irf_detector_response_fwhm_ps},
+                                                    peak_delays_ps=[irf_peak_delay1, irf_peak_delay2, irf_peak_delay3, irf_peak_delay4],
+                                                    peak_ratios=[irf_peak_ratio1, irf_peak_ratio2, irf_peak_ratio3, irf_peak_ratio4],
+                                                    avg_noise_floor=irf_avg_noise_floor,
+                                                    sd_noise_floor=irf_sd_noise_floor
+                                                )
+                
+                irf = irf - np.min(irf)
+                irf = irf / np.sum(irf)
             
             datapoint = sig.convolve(dtof_interpolated, irf, mode='full')[:len(dtof_interpolated)]
 
