@@ -2,3 +2,6 @@ numpy
 scipy
 pmcx
 matplotlib
+torch
+scikit-learn
+mat73
