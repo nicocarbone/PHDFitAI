@@ -4,3 +4,5 @@ venv
 .venv
 *.mat
 *.png
+*.npy
+*.asc
