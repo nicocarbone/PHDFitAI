@@ -11,15 +11,15 @@ import time
 
 tic = time.time()
 
-mcData = mat73.loadmat('DTOFs_2-24-2025_fine.mat')
-#mcData = mat73.loadmat('DTOFs_2-25-2025_coarseAndWider_1e9.mat')
+#mcData = mat73.loadmat('DTOFs_2-24-2025_fine.mat')
+mcData = mat73.loadmat('DTOFs_2-25-2025_coarseAndWider_1e9.mat')
 uas = mcData['ua'].reshape(-1)
 upss = mcData['ups'].reshape(-1)
 rhos = mcData['rho'].reshape(-1)
 dtofs = mcData['DTOF']
 cfg = mcData['cfg']
 
-nroOPs = 750
+nroOPs = 1
 nroRhos = 1
 nroIRFs = 2
 n_channels = 4096
@@ -36,6 +36,8 @@ sim_irfs = []
 sim_tags = []
 sim_randomsPHD = []
 sim_randomsIRF = []
+
+save_folder = "SIMs"
 
 print('Starting simulation. Number of datapoints: {}...'.format(nroOPs*nroRhos*nroIRFs))
 
@@ -183,12 +185,12 @@ sim_results = np.array(sim_results)
 sim_randomsPHD = np.array(sim_randomsPHD)
 sim_randomsIRF = np.array(sim_randomsIRF)
 
-date_time = time.strftime("%Y-%m-%d_%H-%M-%S")
-np.save('sim_tags_{}.npy'.format(date_time), sim_tags)
-np.save('sim_irfs_{}.npy'.format(date_time), sim_irfs)
-np.save('sim_results_{}.npy'.format(date_time), sim_results)
-np.save('sim_randomsPHD_{}.npy'.format(date_time), sim_randomsPHD)
-np.save('sim_randomsIRF_{}.npy'.format(date_time), sim_randomsIRF)
+date_time = time.strftime("%Y%m%d%H%M%S")
+np.save('{}/sim_tags_{}.npy'.format(save_folder,date_time), sim_tags)
+np.save('{}/sim_irfs_{}.npy'.format(save_folder,date_time), sim_irfs)
+np.save('{}/sim_results_{}.npy'.format(save_folder,date_time), sim_results)
+np.save('{}/sim_randomsPHD_{}.npy'.format(save_folder,date_time), sim_randomsPHD)
+np.save('{}/sim_randomsIRF_{}.npy'.format(save_folder,date_time), sim_randomsIRF)
 
 toc = time.time()
 print("Simulation ended. Elapsed time: ", toc - tic, " seconds")
