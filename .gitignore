@@ -6,3 +6,5 @@ venv
 *.png
 *.npy
 *.asc
+*.json
+*.pth
