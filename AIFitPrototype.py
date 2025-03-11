@@ -215,8 +215,13 @@ if __name__ == '__main__':
 
     # Iterate through each file in the folder SIMs that starts with sim_results_
     # First extract the suffix from the filename so they are loaded in the same order
+    
+    rho = 30
+    
+    sims_folder = "SIMs/"+"rho"+str(rho)+"mm"
+    
     sim_runs = []
-    for filename in os.listdir('SIMs'):
+    for filename in os.listdir(sims_folder):
         if filename.startswith('sim_results_'):
             suffix = filename.split('_')[-1] # Extract the suffix
             sim_runs.append(suffix)
@@ -224,7 +229,7 @@ if __name__ == '__main__':
     histograms_data = []
     for suffix in sim_runs:
         filename = 'sim_results_' + suffix
-        file_path = os.path.join('SIMs', filename)
+        file_path = os.path.join(sims_folder, filename)
         histograms_data.append(np.load(file_path))
 
     histograms_data = np.concatenate(histograms_data, axis=0) # Concatenate all histograms
@@ -234,7 +239,7 @@ if __name__ == '__main__':
     irfs_data = []
     for suffix in sim_runs:
         filename = 'sim_irfs_' + suffix
-        file_path = os.path.join('SIMs', filename)
+        file_path = os.path.join(sims_folder, filename)
         irfs_data.append(np.load(file_path))
 
     irfs_data = np.concatenate(irfs_data, axis=0) # Concatenate all IRFs
@@ -244,7 +249,7 @@ if __name__ == '__main__':
     tags_data = []
     for suffix in sim_runs:
         filename = 'sim_tags_' + suffix
-        file_path = os.path.join('SIMs', filename)
+        file_path = os.path.join(sims_folder, filename)
         tags_data.append(np.load(file_path))
 
     tags_data = np.concatenate(tags_data, axis=0) # Concatenate all tags
@@ -479,7 +484,7 @@ if __name__ == '__main__':
     print("Median error in ua: ", np.nanmedian(error_ua))
 
     # Save the trained model and hyperparameters
-    model_folder = "TrainedModels"
+    model_folder = "TrainedModels/rho" + str(rho) + "mm"
     if not os.path.exists(model_folder):
         os.makedirs(model_folder)
     
