@@ -12,14 +12,16 @@ import time
 tic = time.time()
 
 #mcData = mat73.loadmat('DTOFs_2-24-2025_fine.mat')
-mcData = mat73.loadmat('DTOFs_2-25-2025_coarseAndWider_1e9.mat')
+mcData = mat73.loadmat('DTOFs_2-25-2025_coarseAndWider.mat')
 uas = mcData['ua'].reshape(-1)
 upss = mcData['ups'].reshape(-1)
 rhos = mcData['rho'].reshape(-1)
 dtofs = mcData['DTOF']
 cfg = mcData['cfg']
+print("Loaded DTOFs from mat file. Number of DTOFs: ", len(uas)*len(upss)*len(rhos))
 
-nroOPs = 1
+
+nroOPs = 250
 nroRhos = 1
 nroIRFs = 2
 n_channels = 4096
@@ -30,6 +32,7 @@ irf_minDelay = 1000
 
 irf_real_proportion = 0.7
 irf_real_samples = np.load('irfs_samples.npy')
+print("IRF real samples: ", len(irf_real_samples))
 
 sim_results = []
 sim_irfs = []
@@ -76,12 +79,12 @@ for iua in range(nroOPs):
             
             idsim += 1
             
-            print('{}/{} - ua = {}, ups = {}, rho = {}'.format(idsim, nroOPs*nroRhos*nroIRFs, ua, ups, rho))
-            
             irf_real_selected = np.random.rand()
             if irf_real_selected < irf_real_proportion:
+                print('{}/{} - ua = {}, ups = {}, rho = {}, using real IRF'.format(idsim, nroOPs*nroRhos*nroIRFs, ua, ups, rho))
                 irf = irf_real_samples[np.random.randint(0, len(irf_real_samples))]
             else:
+                print('{}/{} - ua = {}, ups = {}, rho = {}, using simulated IRF'.format(idsim, nroOPs*nroRhos*nroIRFs, ua, ups, rho))
                 irf_peak_delay1 = int(np.random.normal(5000, 500))
                 if irf_peak_delay1 < irf_minDelay: irf_peak_delay1 = irf_minDelay
                 irf_peak_delay2 = irf_peak_delay1 + int(np.random.normal(200, 50))
