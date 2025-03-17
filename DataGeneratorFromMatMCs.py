@@ -13,12 +13,13 @@ import os
 tic = time.time()
 
 #mcData = mat73.loadmat('DTOFs_2-24-2025_fine.mat')
-mcData = mat73.loadmat('DTOFs_2-25-2025_coarseAndWider.mat')
-uas = mcData['ua'].reshape(-1)
-upss = mcData['ups'].reshape(-1)
-rhos = mcData['rho'].reshape(-1)
-dtofs = mcData['DTOF']
+mcData = mat73.loadmat('DTOFs_2-25-2025_coarseAndWider_1e9.mat')
+uas = mcData['ua'].reshape(-1).astype(np.float32)
+upss = mcData['ups'].reshape(-1).astype(np.float32)
+rhos = mcData['rho'].reshape(-1).astype(np.float32)
+dtofs = mcData['DTOF'].astype(np.float32)
 cfg = mcData['cfg']
+del mcData
 print("Loaded DTOFs from mat file. Number of DTOFs: ", len(uas)*len(upss)*len(rhos))
 
 
@@ -50,6 +51,15 @@ print('Starting simulation. Number of datapoints: {}...'.format(nroOPs*nroIRFs))
 
 idsim = 0
 
+phd_noise_floor_add_avg = 500
+phd_noise_floor_add_sd = 50
+phd_noise_floor_mult_avg = 1
+phd_noise_floor_mult_sd = 0.02
+phd_back_cte_avg = 2e-11
+phd_back_cte_sd = 1e-11
+phd_nphotons_avg = 2e7
+phd_nphotons_sd = 1e6
+
 for iua in range(nroOPs):
     
     idua = np.random.randint(0, len(uas))
@@ -77,11 +87,14 @@ for iua in range(nroOPs):
     for iirf in range(nroIRFs):
         
         idsim += 1
-        
+               
         irf_real_selected = np.random.rand()
         if irf_real_selected < irf_real_proportion:
             print('{}/{} - ua = {}, ups = {}, rho = {}, using real IRF'.format(idsim, nroOPs*nroIRFs, ua, ups, rho))
-            irf = irf_real_samples[np.random.randint(0, len(irf_real_samples))]
+            irf_raw = irf_real_samples[np.random.randint(0, len(irf_real_samples))]
+            irf = sc.signal.savgol_filter(irf_raw, 10, 3)
+            irf = irf-10*np.median(irf)
+            irf[irf < 0] = 0
         else:
             print('{}/{} - ua = {}, ups = {}, rho = {}, using simulated IRF'.format(idsim, nroOPs*nroIRFs, ua, ups, rho))
             irf_peak_delay1 = int(np.random.normal(5000, 500))
@@ -146,40 +159,43 @@ for iua in range(nroOPs):
                                                 sd_noise_floor=irf_sd_noise_floor
                                             )
             
-            irf = irf - np.min(irf)
-            irf = irf / np.sum(irf)
+        irf_norm = irf - np.min(irf)
         
-        datapoint = sig.convolve(dtof_interpolated, irf, mode='full')[:len(dtof_interpolated)]
+        irf_norm = irf_norm / np.sum(irf_norm)
+        
+        datapoint = sig.convolve(dtof_interpolated, irf_norm, mode='full')[:len(dtof_interpolated)]
 
-        phd_back_cte = np.random.normal(1e-9, 1e-10)
+        phd_back_cte = np.random.normal(phd_back_cte_avg, phd_back_cte_sd)
         if phd_back_cte < 0: phd_back_cte = 0
         
-        phd_noise_loor_mult = np.random.normal(1, 0.02)
+        phd_noise_floor_mult = np.random.normal(phd_noise_floor_mult_avg, phd_noise_floor_mult_sd)
         
-        phd_noise_floor_add = np.random.normal(2000, 200)
+        phd_noise_floor_add = np.random.normal(phd_noise_floor_add_avg, phd_noise_floor_add_sd)
         if phd_noise_floor_add < 0: phd_noise_floor_add = 0
 
-        phd_nphotons = int(np.random.normal(2e8, 1e6))
+        phd_nphotons = int(np.random.normal(phd_nphotons_avg, phd_nphotons_sd))
         
-        sim_randomsPHD.append([phd_back_cte, phd_noise_loor_mult, phd_noise_floor_add, phd_nphotons])
+        sim_randomsPHD.append([phd_back_cte, phd_noise_floor_mult, phd_noise_floor_add, phd_nphotons])
 
         datapoint = datapoint + phd_back_cte
         datapoint[datapoint < 0] = 0
         probabilities = datapoint / np.sum(datapoint)
-
+        
         # Generate random times of flight based on the distribution
         bins = np.arange(len(datapoint))
         simulated_arrival_times = np.random.choice(bins, size=phd_nphotons, p=probabilities)
 
-        simulated_phd = np.histogram(simulated_arrival_times, bins=n_channels)[0]
-        simulated_mult_noise = np.random.normal(loc=phd_noise_loor_mult, scale=0.02, size=n_channels)
+        simulated_phd = np.histogram(simulated_arrival_times, bins=n_channels, range=(0,n_channels))[0]
+        
+        simulated_mult_noise = np.random.normal(loc=phd_noise_floor_mult, scale=0.02, size=n_channels)
         simulated_add_noise = np.random.poisson(lam=phd_noise_floor_add, size=n_channels)
         simulated_phd = simulated_phd*simulated_mult_noise + simulated_add_noise
         simulated_phd[simulated_phd < 0] = 0
+        sim_results.append(simulated_phd)
+
         
         sim_tags.append([ua, ups, rho, iirf])
-        sim_irfs.append(irf)
-        sim_results.append(simulated_phd)
+        sim_irfs.append(irf_raw)
 
 sim_tags = np.array(sim_tags)
 sim_irfs = np.array(sim_irfs)
