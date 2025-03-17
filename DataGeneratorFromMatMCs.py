@@ -95,6 +95,7 @@ for iua in range(nroOPs):
             irf = sc.signal.savgol_filter(irf_raw, 10, 3)
             irf = irf-10*np.median(irf)
             irf[irf < 0] = 0
+            sim_irfs.append(irf_raw)
         else:
             print('{}/{} - ua = {}, ups = {}, rho = {}, using simulated IRF'.format(idsim, nroOPs*nroIRFs, ua, ups, rho))
             irf_peak_delay1 = int(np.random.normal(5000, 500))
@@ -158,6 +159,7 @@ for iua in range(nroOPs):
                                                 avg_noise_floor=irf_avg_noise_floor,
                                                 sd_noise_floor=irf_sd_noise_floor
                                             )
+            sim_irfs.append(irf)
             
         irf_norm = irf - np.min(irf)
         
@@ -195,7 +197,7 @@ for iua in range(nroOPs):
 
         
         sim_tags.append([ua, ups, rho, iirf])
-        sim_irfs.append(irf_raw)
+        
 
 sim_tags = np.array(sim_tags)
 sim_irfs = np.array(sim_irfs)
