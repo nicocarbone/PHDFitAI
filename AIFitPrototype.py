@@ -6,11 +6,41 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import Dataset, DataLoader
 from torch.optim.lr_scheduler import StepLR
 import matplotlib.pyplot as plt
-import random
-import time
-import json
-
+from scipy.signal import savgol_filter
 import os
+import random
+import json
+import time
+
+
+def move_array_ypos(arr, xpos):
+    '''
+    Move array to the right by xpos
+    '''
+    arr = np.roll(arr, xpos)
+    if xpos > 0:
+        arr[:xpos] = 0
+    elif xpos < 0:
+        arr[xpos:] = 0
+    return arr
+    
+
+def normalize_to_area(signal):
+        """Normalizes a 1D signal to have an area (sum) of 1.
+
+        Args:
+            signal (torch.Tensor): A tensor representing a 1D signal, shape (..., length).
+                                Assumes the last dimension is the sequence length.
+
+        Returns:
+            torch.Tensor: Normalized signal, shape (..., length).
+                        Returns the original signal if its sum is zero to avoid division by zero.
+        """
+        signal_sum = torch.sum(signal, dim=-1, keepdim=True) # Sum along the last dimension (length)
+        # Avoid division by zero if the sum is zero (e.g., all zeros input)
+        #normalized_signal = torch.where(signal_sum > 0, signal / signal_sum, signal)
+        normalized_signal = signal
+        return normalized_signal
 
 class TurbidMediaDataset(Dataset):
     def __init__(self, histograms, irfs, ups, ua):
@@ -27,7 +57,7 @@ class TurbidMediaDataset(Dataset):
         irf = torch.tensor(self.irfs[idx], dtype=torch.float32).unsqueeze(0) # Add channel dimension
         ups = torch.tensor(self.ups[idx], dtype=torch.float32)
         ua = torch.tensor(self.ua[idx], dtype=torch.float32)
-        return histogram, irf, ups, ua
+        return normalize_to_area(histogram), normalize_to_area(irf), ups, ua
 
 # Custom Exp Layer Module
 class ExpLayer(nn.Module):
@@ -178,9 +208,14 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, scheduler
                 irfs = irfs.to(device)
                 ups = ups.to(device)
                 ua = ua.to(device)
-                outputs = model(histograms, irfs)
+
+                histograms_normalized = normalize_to_area(histograms)
+                irfs_normalized = normalize_to_area(irfs)
+
+                outputs = model(histograms_normalized, irfs_normalized) # Use normalized inputs
                 val_loss = criterion(outputs, torch.stack((ups, ua), dim=1))
                 val_running_loss += val_loss.item()
+
 
         epoch_val_loss = val_running_loss / len(val_loader)
         val_losses.append(epoch_val_loss)
@@ -189,8 +224,7 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, scheduler
         current_lr = optimizer.param_groups[0]['lr']
         learning_rates.append(current_lr)
 
-        if (epoch+1) % 5 == 0:
-            print(f'Epoch {epoch+1}/{epochs}, Train Loss: {epoch_train_loss:.4f}, Val Loss: {epoch_val_loss:.4f}, LR: {current_lr:.6f}')
+        print(f'Epoch {epoch+1}/{epochs}, Train Loss: {epoch_train_loss:.4f}, Val Loss: {epoch_val_loss:.4f}, LR: {current_lr:.6f}')
 
         # Early stopping check
         if epoch_val_loss < best_val_loss:
@@ -205,9 +239,7 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, scheduler
             model.load_state_dict(best_model_state) # Load the best model state
             break # Stop training
 
-    return model, train_losses, val_losses, learning_rates
-
-
+    return model, train_losses, val_losses, learning_rates, best_val_loss
 
 
 
@@ -216,10 +248,18 @@ if __name__ == '__main__':
     # Iterate through each file in the folder SIMs that starts with sim_results_
     # First extract the suffix from the filename so they are loaded in the same order
     
+    date_time = time.strftime("%Y%m%d%H%M%S")
+       
     rho = 30
-    
-    sims_folder = "SIMs/"+"rho"+str(rho)+"mm"
-    
+    model_folder = "TrainedModels/rho" + str(rho) + "mm"
+    if not os.path.exists(model_folder):
+        os.makedirs(model_folder)
+        
+    sims_folder = "SIMs/"+"rho"+str(int(rho))+"mm"
+    config_path = '{}/optical_propierties_estimator_config_{}.json'.format(model_folder,date_time)
+
+    print("Running training. Simulation folder: ", sims_folder)
+
     sim_runs = []
     for filename in os.listdir(sims_folder):
         if filename.startswith('sim_results_'):
@@ -259,9 +299,22 @@ if __name__ == '__main__':
     ua_data = tags_data[:, 0] # Extract ups
     ups_data = tags_data[:, 1] # Extract ua
 
-    print(len(ua_data))
-    print(ua_data)
-    print(ups_data)
+    cut_threshold = 0.05
+
+    for i in range(len(ua_data)):
+        #irfs_data[i] = irfs_data[i] / np.sum(irfs_data[i])
+        irfs_data[i] = irfs_data[i] / np.max(savgol_filter(irfs_data[i], 50, 3))
+        irfs_data[i][irfs_data[i] < cut_threshold] = 0
+        histograms_data[i] = histograms_data[i] / np.max(savgol_filter(histograms_data[i], 50, 3))
+        histograms_data[i][histograms_data[i] < cut_threshold] = 0
+
+    max_xpos_roll = 100
+    min_xpos_roll = -200
+    for i in range(len(ua_data)):
+        irf_xpos_roll = np.random.randint(min_xpos_roll, max_xpos_roll)
+        irfs_data[i] = move_array_ypos(irfs_data[i], irf_xpos_roll)
+
+    print("Number of simulations: {}\n".format(len(ua_data)))
 
     ## 2. Split data into training and validation sets
     histograms_train, histograms_val, irfs_train, irfs_val, ups_train, ups_val, ua_train, ua_val = train_test_split(
@@ -270,7 +323,7 @@ if __name__ == '__main__':
 
     # 3. Create Datasets and DataLoaders
 
-    batch_size = 64
+    batch_size = 128
 
     train_dataset = TurbidMediaDataset(histograms_train, irfs_train, ups_train, ua_train)
     val_dataset = TurbidMediaDataset(histograms_val, irfs_val, ups_val, ua_val)
@@ -279,34 +332,31 @@ if __name__ == '__main__':
 
     # 4. Hyperparameter Search Space (Define ranges/choices for hyperparameters)
     hyperparameter_space = {
-        'cnn_filters_hist': [[16, 32, 128, 256, 1024], 
-                             [16, 32, 128, 512, 1024], 
-                             [32, 128, 256, 1024],
-                             [32, 128, 256, 512]], # List of lists for CNN filters
-        'cnn_filters_irf': [[16, 32, 128, 256, 1024], 
-                            [16, 32, 128, 512, 1024], 
-                            [32, 128, 256, 1024],
-                            [32, 128, 256, 512]], # List of lists for CNN filters
-        'kernel_size_cnn': [5, 10, 15, 20],
-        'pool_size_cnn': [2],
-        'padding_cnn': [1, 2],
+        'cnn_filters_hist': [[16, 32, 256, 512, 1028],
+                             [16, 32, 128, 1024], 
+                             [16, 32, 256, 1024]], # List of lists for CNN filters
+        'cnn_filters_irf': [[16, 32, 256, 1024], 
+                            [16, 32, 512, 1024], 
+                            [32, 128, 256, 1024]], # List of lists for CNN filters
+        'kernel_size_cnn': [20,15,10],
+        'pool_size_cnn': [2, 1],
+        'padding_cnn': [2, 1],
         'use_batchnorm_cnn': [True, False],
-        'fc_layer_sizes': [[1024, 512, 256, 128, 32], 
-                           [1024, 256, 128, 32], 
-                           [512, 256, 128, 32],
+        'fc_layer_sizes': [[512, 128, 16],
+                           [512, 256, 32], 
                            [256, 128, 32]], # List of lists for FC layers
-        'dropout_rate_fc': [0.0, 0.2, 0.4, 0.6] ,
+        'dropout_rate_fc': [0.2, 0.3, 0.4] ,
         'lr': [0.002],
         'step_size': [10],
         'gamma': [0.8],
         'batch_size': [batch_size],
         'ua_weight': [300.0],
-        'clip_grad': [1.0, None], # Example of including None (no clip_grad)
-        'patience': [100] # Example for early stopping patience
+        'clip_grad': [1.0], 
+        'patience': [100]
     }
 
     num_trials = 40  # Number of random hyperparameter combinations to try
-    trial_epochs = 100  # Number of epochs to train each trial
+    trial_epochs = 50  # Number of epochs to train each trial
     best_val_loss = float('inf')
     best_hyperparameters = None
     history = [] # To store results of each trial
@@ -332,6 +382,7 @@ if __name__ == '__main__':
             'fc_layer_sizes': current_hyperparameters['fc_layer_sizes'],
             'dropout_rate_fc': current_hyperparameters['dropout_rate_fc']
         }
+        
         batch_size = current_hyperparameters['batch_size']
         lr = current_hyperparameters['lr']
         step_size = current_hyperparameters['step_size']
@@ -352,12 +403,20 @@ if __name__ == '__main__':
 
         # 8. Train the Model
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        trained_model, train_losses, val_losses, learning_rates = train_model(
-            model, train_loader, val_loader, criterion, optimizer, scheduler, epochs=trial_epochs, device=device, clip_grad=clip_grad_val, patience=patience_val # Pass clip_grad and patience
-        )
+        trained_model, train_losses, val_losses, learning_rates, best_val_loss_train = train_model(model, 
+                                                                                                   train_loader, 
+                                                                                                   val_loader, 
+                                                                                                   criterion, 
+                                                                                                   optimizer, 
+                                                                                                   scheduler, 
+                                                                                                   epochs=trial_epochs, 
+                                                                                                   device=device, 
+                                                                                                   clip_grad=clip_grad_val, 
+                                                                                                   patience=patience_val)
 
         # 9. Evaluate and Store Results
-        final_val_loss = val_losses[-1] # Or could use the best validation loss from early stopping if you store it in train_model
+        #final_val_loss = val_losses[-1]
+        final_val_loss = best_val_loss_train # Use best_val_loss from early stopping
         history.append({'hyperparameters': current_hyperparameters, 'val_loss': final_val_loss, 'train_losses': train_losses, 'val_losses': val_losses, 'learning_rates': learning_rates}) # Store more info
 
         print(f"Trial {trial+1} - Val Loss: {final_val_loss:.4f}")
@@ -365,34 +424,17 @@ if __name__ == '__main__':
         if final_val_loss < best_val_loss:
             best_val_loss = final_val_loss
             best_hyperparameters = current_hyperparameters
-            best_model = trained_model # Optionally store the best model itself
+            #best_model = trained_model # Optionally store the best model itself
+            with open(config_path, 'w') as f:
+                json.dump(best_hyperparameters, f, indent=4) 
+        print("Best Validation Loss So Far:", best_val_loss)
 
 
     print("\n--- Hyperparameter Search Summary ---")
     print(f"Best Validation Loss: {best_val_loss:.4f}")
     print("Best Hyperparameters:", best_hyperparameters)
 
-    # 10. Example of Plotting Loss Curves for the best model (optional, you can modify to plot for all trials or top trials)
-    print("\nLong training with best hyperparameters...")
-    if best_hyperparameters:
-        best_trial_history = None
-        for h in history:
-            if h['hyperparameters'] == best_hyperparameters:
-                best_trial_history = h
-                break
-
-        if best_trial_history:
-            plt.figure(figsize=(10, 6))
-            plt.plot(best_trial_history['train_losses'], label='Train Loss (Best Trial)')
-            plt.plot(best_trial_history['val_losses'], label='Validation Loss (Best Trial)')
-            plt.xlabel('Epochs')
-            plt.ylabel('Loss')
-            plt.title('Training and Validation Loss Curve - Best Hyperparameters')
-            plt.legend()
-            plt.grid(True)
-            plt.show()
-            
-            
+    # 10. Train the Final Model with Best Hyperparameters            
     current_hyperparameters = best_hyperparameters
 
     network_config = {
@@ -409,7 +451,7 @@ if __name__ == '__main__':
 
     batch_size = current_hyperparameters['batch_size']
     lr = current_hyperparameters['lr']
-    step_size = current_hyperparameters['step_size']*20
+    step_size = current_hyperparameters['step_size']*5
     gamma = current_hyperparameters['gamma']
     ua_weight = current_hyperparameters['ua_weight']
     clip_grad_val = current_hyperparameters['clip_grad'] # Get clip_grad value for this trial
@@ -426,11 +468,18 @@ if __name__ == '__main__':
 
 
     # 8. Train the Model
-    train_epochs = 2000
+    train_epochs = 500
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    trained_model, train_losses, val_losses, learning_rates = train_model(
-        model, train_loader, val_loader, criterion, optimizer, scheduler, epochs=train_epochs, device=device, clip_grad=clip_grad_val, patience=patience_val # Pass clip_grad and patience
-    )
+    trained_model, train_losses, val_losses, learning_rates, best_val_loss_train = train_model(model,
+                                                                                               train_loader,
+                                                                                               val_loader,
+                                                                                               criterion,
+                                                                                               optimizer,
+                                                                                               scheduler,
+                                                                                               epochs=train_epochs,
+                                                                                               device=device,
+                                                                                               clip_grad=clip_grad_val,
+                                                                                               patience=patience_val)
 
 
     print("Training finished!")
@@ -483,13 +532,5 @@ if __name__ == '__main__':
     print("Median error in ups: ", np.nanmedian(error_ups))
     print("Median error in ua: ", np.nanmedian(error_ua))
 
-    # Save the trained model and hyperparameters
-    model_folder = "TrainedModels/rho" + str(rho) + "mm"
-    if not os.path.exists(model_folder):
-        os.makedirs(model_folder)
-    
-    date_time = time.strftime("%Y%m%d%H%M%S")
-    config_path = '{}/optical_propierties_estimator_config_{}.json'.format(model_folder,date_time)
-    with open(config_path, 'w') as f:
-        json.dump(best_hyperparameters, f, indent=4) # Save with indent for readability
+    # Save the trained model and hyperparameters      
     torch.save(trained_model.state_dict(), '{}/optical_properties_estimator_weights_{}.pth'.format(model_folder,date_time))
