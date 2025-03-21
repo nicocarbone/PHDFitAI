@@ -19,12 +19,14 @@ upss = mcData['ups'].reshape(-1).astype(np.float32)
 rhos = mcData['rho'].reshape(-1).astype(np.float32)
 dtofs = mcData['DTOF'].astype(np.float32)
 cfg = mcData['cfg']
+sim_tend = cfg['tend']
+target_tend = 25e-9
+
 del mcData
 print("Loaded DTOFs from mat file. Number of DTOFs: ", len(uas)*len(upss)*len(rhos))
 
-
 nroOPs = 500
-nroIRFs = 2
+nroIRFs = 3
 n_channels = 4096
 
 idrho = 2
@@ -70,6 +72,12 @@ for iua in range(nroOPs):
     rho = rhos[idrho]
     
     dtof = dtofs[:, idua, idups, idrho]
+    
+    if target_tend > sim_tend:
+        zoom_factor = int(target_tend/sim_tend)
+        new_length = len(dtofs[:,0,0,0])*zoom_factor
+        pad_length = new_length - len(dtofs[:,0,0,0])
+        dtof = np.pad(dtof, (0, pad_length), 'constant', constant_values=(0, 0))
     
     # Get the current size of dtof
     current_size = dtof.shape[0]
