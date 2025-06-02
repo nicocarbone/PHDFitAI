@@ -134,7 +134,7 @@ def mcxdettpsf(detp, detnum, prop, time):
 def MCPHD (uaBulk, usBulk, g=0.9, n=1.4, sdSep = 20, slabThickness = 60, detRad = 3, isRefl = True, maxTime = 5e-9, nTimeBins=500, nPhotons = 1e8):
     maxSizeX = 100
     maxSizeY = 100
-    maxSizeZ = 70
+    maxSizeZ = slabThickness + 10
     initialLayerZ = 2
     cfg={}
     cfg['nphoton']=nPhotons
