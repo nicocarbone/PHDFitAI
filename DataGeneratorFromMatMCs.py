@@ -25,11 +25,11 @@ target_tend = 25e-9
 del mcData
 print("Loaded DTOFs from mat file. Number of DTOFs: ", len(uas)*len(upss)*len(rhos))
 
-nroOPs = 500
+nroOPs = 1000
 nroIRFs = 3
 n_channels = 4096
 
-idrho = 2
+idrho = 3
 rho = rhos[idrho]
 print("Selected rho: {} mm ".format(rho))
 
@@ -62,16 +62,26 @@ phd_back_cte_sd = 1e-11
 phd_nphotons_avg = 2e7
 phd_nphotons_sd = 1e6
 
+ua_max = 0.004
+ua_min = 0
+
 for iua in range(nroOPs):
     
+    
     idua = np.random.randint(0, len(uas))
-    idups = np.random.randint(0, len(upss))
-       
     ua = uas[idua]
+    
+    while ua < ua_min or ua > ua_max:
+        idua = np.random.randint(0, len(uas))
+        ua = uas[idua]
+        
+    idups = np.random.randint(0, len(upss)) 
     ups = upss[idups]
     rho = rhos[idrho]
     
     dtof = dtofs[:, idua, idups, idrho]
+    
+    print(np.shape(dtof))
     
     if target_tend > sim_tend:
         zoom_factor = int(target_tend/sim_tend)
