@@ -6,12 +6,26 @@ import csv
 import sys
 
 nPoints = 10
-
 if len(sys.argv) > 1:
     try:
         nPoints = int(sys.argv[1])
     except ValueError:
         print("Invalid argument for nPoints. Using default value:", nPoints)
+        
+sdSep = 30  # Separation distance in mm
+if len(sys.argv) > 2:
+    try:
+        sdSep = int(sys.argv[2])
+    except ValueError:
+        print("Invalid argument for sdSep. Using default value:", sdSep)
+
+nPhotons = 5e8  # Number of photons to simulate
+if len(sys.argv) > 3:
+    try:
+        nPhotons = int(sys.argv[3])
+    except ValueError:
+        print("Invalid argument for nPhotons. Using default value:", nPhotons)
+
 
 upsRange = [0.1, 2.0]
 uaRange = [0, 0.02]
@@ -20,9 +34,6 @@ g = 0.9
 usRange = np.asarray(upsRange)/(1-g) 
 
 n = 1.4
-sdSep = 30
-
-nPhotons = 5e8
 nBins = 4096
 maxTime = 25e-9
 
